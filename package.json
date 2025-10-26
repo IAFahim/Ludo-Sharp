@@ -28,5 +28,11 @@
       "description": "This sample is just an example",
       "path": "Samples~/Example1"
     }
-  ]
+  ],
+  "_fingerprint": "bbfe24c7d114d803c2fe43cc8f097622c23002fe",
+  "repository": {
+    "url": "https://github.com/IAFahim/LudoLoop.git",
+    "type": "git",
+    "revision": "e3f5fc1424febc0bc1aced1c6cb9623b696dd63c"
+  }
 }
