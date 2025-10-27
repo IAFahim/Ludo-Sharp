@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 
 namespace Ludo
 {
-    public struct LudoBoard
+    [Serializable]
+    public struct LudoBoard : ILudoBoard
     {
         // ===== Constants =====
         private const byte BasePosition = 0;
@@ -27,29 +27,32 @@ namespace Ludo
 
         public static readonly byte[] SafeAbsoluteTiles = {1, 14, 27, 40};
 
-        // ===== State =====
-        public byte[] TokenPositions;
-        public readonly int PlayerCount;
+        public int playerCount;
+        public byte[] tokenPositions;
 
         public LudoBoard(int numberOfPlayers)
         {
-            if (numberOfPlayers < 2 || numberOfPlayers > 4)
-                throw new ArgumentException("Number of players must be between 2 and 4.");
-            PlayerCount = numberOfPlayers;
-            TokenPositions = new byte[PlayerCount * TokensPerPlayer];
+            playerCount = numberOfPlayers;
+            tokenPositions = new byte[playerCount * TokensPerPlayer];
         }
-
-        // ===== Public Queries =====
-        public bool IsAtBase(int t) => TokenPositions[t] == BasePosition;
-        public bool IsOnMainTrack(int t) => TokenPositions[t] >= StartPosition && TokenPositions[t] <= TotalMainTrackTiles;
-        public bool IsOnHomeStretch(int t) => TokenPositions[t] >= HomeStretchStartPosition && TokenPositions[t] < HomePosition;
-        public bool IsHome(int t) => TokenPositions[t] == HomePosition;
+        
+        public byte[] TokenPositions => tokenPositions;
+        public int PlayerCount => playerCount;
+        public bool IsAtBase(int t) => tokenPositions[t] == BasePosition;
+        public bool IsOnMainTrack(int t) => tokenPositions[t] >= StartPosition && tokenPositions[t] <= TotalMainTrackTiles;
+        public bool IsOnHomeStretch(int t) => tokenPositions[t] >= HomeStretchStartPosition && tokenPositions[t] < HomePosition;
+        public bool IsHome(int t) => tokenPositions[t] == HomePosition;
 
         public bool IsOnSafeTile(int t)
         {
             if (IsOnHomeStretch(t)) return true;
             if (!IsOnMainTrack(t)) return false;
-            return SafeAbsoluteTiles.Contains((byte)GetAbsolutePosition(t));
+            return Contains(SafeAbsoluteTiles,(byte)GetAbsolutePosition(t));
+        }
+        
+        public bool Contains(byte[] array, byte value)
+        {
+            return Array.Exists(array, element => element == value);
         }
 
         public bool HasWon(int playerIndex)
@@ -90,7 +93,7 @@ namespace Ludo
             if (!TryGetNewPosition(tokenIndex, steps, out byte newPos))
                 return;
 
-            TokenPositions[tokenIndex] = newPos;
+            tokenPositions[tokenIndex] = newPos;
             if (IsOnMainTrack(tokenIndex) && !IsOnSafeTile(tokenIndex))
                 CaptureTokensAt(tokenIndex);
         }
@@ -124,7 +127,7 @@ namespace Ludo
         /// ```
         private bool TryGetNewPosition(int tokenIndex, int steps, out byte newPos)
         {
-            newPos = TokenPositions[tokenIndex];
+            newPos = tokenPositions[tokenIndex];
             if (IsHome(tokenIndex)) return false;
 
             if (IsAtBase(tokenIndex))
@@ -157,7 +160,7 @@ namespace Ludo
             int p = PlayerOf(tokenIndex);
             int absStart = StartAbsoluteTile(p);
             if (IsTileBlocked(absStart, p)) return;
-            TokenPositions[tokenIndex] = StartPosition; // safe tile; no capture
+            tokenPositions[tokenIndex] = StartPosition; // safe tile; no capture
         }
 
         /// PlantUML: GetMovableTokens
@@ -189,7 +192,7 @@ namespace Ludo
 
         private bool TryExitBase(int tokenIndex, int steps, out byte newPos)
         {
-            newPos = TokenPositions[tokenIndex];
+            newPos = tokenPositions[tokenIndex];
             if (steps != ExitFromBaseAtRoll) return false;
             int p = PlayerOf(tokenIndex);
             int absStart = StartAbsoluteTile(p);
@@ -200,11 +203,11 @@ namespace Ludo
 
         private bool ComputeDestinationFromMainTrack(int tokenIndex, int steps, out byte newPos)
         {
-            newPos = TokenPositions[tokenIndex];
+            newPos = tokenPositions[tokenIndex];
             // Check path blockades on traversed absolute tiles only while on main track
             if (PathBlockedByOpponent(tokenIndex, steps)) return false;
 
-            int current = TokenPositions[tokenIndex];
+            int current = tokenPositions[tokenIndex];
             int target = current + steps;
 
             if (target <= TotalMainTrackTiles)
@@ -223,7 +226,7 @@ namespace Ludo
 
         private bool ComputeDestinationFromHomeStretch(int tokenIndex, int steps, out byte newPos)
         {
-            newPos = TokenPositions[tokenIndex];
+            newPos = tokenPositions[tokenIndex];
             int target = newPos + steps;
             if (target > HomePosition) return false; // overshoot
             newPos = (byte)target;
@@ -242,7 +245,7 @@ namespace Ludo
         {
             if (!IsOnMainTrack(tokenIndex)) yield break;
 
-            int currentRel = TokenPositions[tokenIndex]; // 1..52
+            int currentRel = tokenPositions[tokenIndex]; // 1..52
             int p = PlayerOf(tokenIndex);
             int stepsOnMain = Math.Min(steps, TotalMainTrackTiles - currentRel);
 
@@ -261,18 +264,18 @@ namespace Ludo
             int p = PlayerOf(movedTokenIndex);
             int newAbs = GetAbsolutePosition(movedTokenIndex);
 
-            for (int i = 0; i < TokenPositions.Length; i++)
+            for (int i = 0; i < tokenPositions.Length; i++)
             {
                 if (PlayerOf(i) == p) continue;
                 if (!IsOnMainTrack(i)) continue;
                 if (GetAbsolutePosition(i) == newAbs)
-                    TokenPositions[i] = BasePosition; // send to base
+                    tokenPositions[i] = BasePosition; // send to base
             }
         }
 
         private bool IsTileBlocked(int absolutePosition, int movingPlayer)
         {
-            for (int opp = 0; opp < PlayerCount; opp++)
+            for (int opp = 0; opp < playerCount; opp++)
             {
                 if (opp == movingPlayer) continue;
 
@@ -296,7 +299,7 @@ namespace Ludo
         {
             if (!IsOnMainTrack(tokenIndex)) return -1;
             int p = PlayerOf(tokenIndex);
-            int rel = TokenPositions[tokenIndex];
+            int rel = tokenPositions[tokenIndex];
             int off = GetPlayerTrackOffset(p);
             return (rel - 1 + off) % TotalMainTrackTiles + 1;
         }
@@ -321,12 +324,12 @@ namespace Ludo
         public void DebugSetTokenAtRelative(int playerIndex, int tokenOrdinal, int relative)
         {
             if (relative < 0 || relative > HomePosition) throw new ArgumentOutOfRangeException(nameof(relative));
-            TokenPositions[TokenIndex(playerIndex, tokenOrdinal)] = (byte)relative;
+            tokenPositions[TokenIndex(playerIndex, tokenOrdinal)] = (byte)relative;
         }
         public void DebugSetTokenAtAbsolute(int playerIndex, int tokenOrdinal, int absoluteTile)
         {
             if (absoluteTile < 1 || absoluteTile > TotalMainTrackTiles) throw new ArgumentOutOfRangeException(nameof(absoluteTile));
-            TokenPositions[TokenIndex(playerIndex, tokenOrdinal)] = RelativeForAbsolute(playerIndex, absoluteTile);
+            tokenPositions[TokenIndex(playerIndex, tokenOrdinal)] = RelativeForAbsolute(playerIndex, absoluteTile);
         }
         public void DebugMakeBlockadeAtAbsolute(int ownerPlayerIndex, int absoluteTile)
         {
@@ -340,13 +343,13 @@ namespace Ludo
 
         private int GetPlayerTrackOffset(int playerIndex)
         {
-            if (PlayerCount == 2) return playerIndex * 2 * PlayerTrackOffset; // 0, 26
+            if (playerCount == 2) return playerIndex * 2 * PlayerTrackOffset; // 0, 26
             return playerIndex * PlayerTrackOffset;                            // 0, 13, 26, 39
         }
 
         private void ValidateTokenIndex(int tokenIndex)
         {
-            if (tokenIndex < 0 || tokenIndex >= TokenPositions.Length)
+            if (tokenIndex < 0 || tokenIndex >= tokenPositions.Length)
                 throw new ArgumentOutOfRangeException(nameof(tokenIndex));
         }
     }

@@ -22,9 +22,9 @@ namespace Ludo.Tests
         public void Constructor_InitializesTokensAtBase(int players, int expectedLen)
         {
             var b = new LudoBoard(players);
-            Assert.That(b.PlayerCount, Is.EqualTo(players));
-            Assert.That(b.TokenPositions.Length, Is.EqualTo(expectedLen));
-            Assert.That(b.TokenPositions.All(p => p == LudoBoard.Base), Is.True);
+            Assert.That(b.playerCount, Is.EqualTo(players));
+            Assert.That(b.tokenPositions.Length, Is.EqualTo(expectedLen));
+            Assert.That(b.tokenPositions.All(p => p == LudoBoard.Base), Is.True);
         }
     }
 
@@ -73,7 +73,7 @@ namespace Ludo.Tests
         {
             var b = new LudoBoard(4);
             b.GetOutOfBase(b.TokenIndex(0,0));
-            Assert.That(b.TokenPositions[b.TokenIndex(0,0)], Is.EqualTo(LudoBoard.MainStart));
+            Assert.That(b.tokenPositions[b.TokenIndex(0,0)], Is.EqualTo(LudoBoard.MainStart));
         }
 
         [Test]
@@ -85,7 +85,7 @@ namespace Ludo.Tests
             b.GetOutOfBase(b.TokenIndex(0,0));
 
             Assert.That(b.IsOnMainTrack(b.TokenIndex(1,0)), Is.True); // opponent remains
-            Assert.That(b.TokenPositions[b.TokenIndex(0,0)], Is.EqualTo(LudoBoard.MainStart));
+            Assert.That(b.tokenPositions[b.TokenIndex(0,0)], Is.EqualTo(LudoBoard.MainStart));
         }
 
         [Test]
@@ -94,7 +94,7 @@ namespace Ludo.Tests
             var b = new LudoBoard(4);
             b.DebugMakeBlockadeAtAbsolute(1, b.StartAbsoluteTile(0));
             b.GetOutOfBase(b.TokenIndex(0,0));
-            Assert.That(b.TokenPositions[b.TokenIndex(0,0)], Is.EqualTo(LudoBoard.Base));
+            Assert.That(b.tokenPositions[b.TokenIndex(0,0)], Is.EqualTo(LudoBoard.Base));
         }
 
         [Test]
@@ -102,7 +102,7 @@ namespace Ludo.Tests
         {
             var b = new LudoBoard(4);
             b.MoveToken(b.TokenIndex(0,0), LudoBoard.ExitRoll);
-            Assert.That(b.TokenPositions[b.TokenIndex(0,0)], Is.EqualTo(LudoBoard.MainStart));
+            Assert.That(b.tokenPositions[b.TokenIndex(0,0)], Is.EqualTo(LudoBoard.MainStart));
         }
 
         [Test]
@@ -111,7 +111,7 @@ namespace Ludo.Tests
             var b = new LudoBoard(4);
             b.DebugMakeBlockadeAtAbsolute(2, b.StartAbsoluteTile(0));
             b.MoveToken(b.TokenIndex(0,0), LudoBoard.ExitRoll);
-            Assert.That(b.TokenPositions[b.TokenIndex(0,0)], Is.EqualTo(LudoBoard.Base));
+            Assert.That(b.tokenPositions[b.TokenIndex(0,0)], Is.EqualTo(LudoBoard.Base));
         }
 
         [Test]
@@ -119,7 +119,7 @@ namespace Ludo.Tests
         {
             var b = new LudoBoard(4);
             b.MoveToken(b.TokenIndex(0,0), 5);
-            Assert.That(b.TokenPositions[b.TokenIndex(0,0)], Is.EqualTo(LudoBoard.Base));
+            Assert.That(b.tokenPositions[b.TokenIndex(0,0)], Is.EqualTo(LudoBoard.Base));
         }
 
         [Test]
@@ -131,7 +131,7 @@ namespace Ludo.Tests
             b.DebugSetTokenAtAbsolute(2, 0, startAbs);
 
             b.MoveToken(b.TokenIndex(0,0), LudoBoard.ExitRoll);
-            Assert.That(b.TokenPositions[b.TokenIndex(0,0)], Is.EqualTo(LudoBoard.MainStart));
+            Assert.That(b.tokenPositions[b.TokenIndex(0,0)], Is.EqualTo(LudoBoard.MainStart));
 
             // No capture (safe)
             Assert.That(b.IsOnMainTrack(b.TokenIndex(1,0)), Is.True);
@@ -148,7 +148,7 @@ namespace Ludo.Tests
             var b = new LudoBoard(4);
             b.DebugSetTokenAtRelative(0, 0, 10);
             b.MoveToken(b.TokenIndex(0,0), 3);
-            Assert.That(b.TokenPositions[b.TokenIndex(0,0)], Is.EqualTo(13));
+            Assert.That(b.tokenPositions[b.TokenIndex(0,0)], Is.EqualTo(13));
         }
 
         [Test]
@@ -158,7 +158,7 @@ namespace Ludo.Tests
             b.DebugSetTokenAtRelative(0, 0, 49);
             b.MoveToken(b.TokenIndex(0,0), 3);
             Assert.That(b.IsOnMainTrack(b.TokenIndex(0,0)), Is.True);
-            Assert.That(b.TokenPositions[b.TokenIndex(0,0)], Is.EqualTo(52));
+            Assert.That(b.tokenPositions[b.TokenIndex(0,0)], Is.EqualTo(52));
         }
 
         [TestCase(50, 3, 53)]
@@ -170,7 +170,7 @@ namespace Ludo.Tests
             b.DebugSetTokenAtRelative(0, 0, start);
             b.MoveToken(b.TokenIndex(0,0), steps);
             Assert.That(b.IsOnHomeStretch(b.TokenIndex(0,0)), Is.True);
-            Assert.That(b.TokenPositions[b.TokenIndex(0,0)], Is.EqualTo(expected));
+            Assert.That(b.tokenPositions[b.TokenIndex(0,0)], Is.EqualTo(expected));
         }
 
         [TestCase(52, 7, 59)] // exactly home
@@ -182,7 +182,7 @@ namespace Ludo.Tests
             b.DebugSetTokenAtRelative(0, 0, start);
             b.MoveToken(b.TokenIndex(0,0), steps);
             Assert.That(b.IsHome(b.TokenIndex(0,0)), Is.True);
-            Assert.That(b.TokenPositions[b.TokenIndex(0,0)], Is.EqualTo(expected));
+            Assert.That(b.tokenPositions[b.TokenIndex(0,0)], Is.EqualTo(expected));
         }
 
         [TestCase(52, 8)]
@@ -193,7 +193,7 @@ namespace Ludo.Tests
             var b = new LudoBoard(4);
             b.DebugSetTokenAtRelative(0, 0, start);
             b.MoveToken(b.TokenIndex(0,0), steps);
-            Assert.That(b.TokenPositions[b.TokenIndex(0,0)], Is.EqualTo((byte)start));
+            Assert.That(b.tokenPositions[b.TokenIndex(0,0)], Is.EqualTo((byte)start));
         }
 
         [Test]
@@ -202,9 +202,9 @@ namespace Ludo.Tests
             var b = new LudoBoard(4);
             b.DebugSetTokenAtRelative(0, 0, 10);
             b.MoveToken(b.TokenIndex(0,0), 0);
-            Assert.That(b.TokenPositions[b.TokenIndex(0,0)], Is.EqualTo(10));
+            Assert.That(b.tokenPositions[b.TokenIndex(0,0)], Is.EqualTo(10));
             b.MoveToken(b.TokenIndex(0,0), -2);
-            Assert.That(b.TokenPositions[b.TokenIndex(0,0)], Is.EqualTo(10));
+            Assert.That(b.tokenPositions[b.TokenIndex(0,0)], Is.EqualTo(10));
         }
 
         [Test]
@@ -221,7 +221,7 @@ namespace Ludo.Tests
             b.MoveToken(b.TokenIndex(0,0), 2);
 
             // Opponent should remain (not captured)
-            Assert.That(b.TokenPositions[b.TokenIndex(1,0)], Is.EqualTo(b.RelativeForAbsolute(1, 10)));
+            Assert.That(b.tokenPositions[b.TokenIndex(1,0)], Is.EqualTo(b.RelativeForAbsolute(1, 10)));
         }
     }
 
@@ -244,7 +244,7 @@ namespace Ludo.Tests
             b.DebugSetTokenAtRelative(0, 0, startRel);
             b.MoveToken(b.TokenIndex(0,0), 1);
 
-            Assert.That(b.TokenPositions[b.TokenIndex(0,0)], Is.EqualTo((byte)startRel));
+            Assert.That(b.tokenPositions[b.TokenIndex(0,0)], Is.EqualTo((byte)startRel));
         }
 
         [Test]
@@ -258,7 +258,7 @@ namespace Ludo.Tests
             b.DebugSetTokenAtRelative(0, 0, startRel);
 
             b.MoveToken(b.TokenIndex(0,0), 1);
-            Assert.That(b.TokenPositions[b.TokenIndex(0,0)], Is.Not.EqualTo(relTo14));
+            Assert.That(b.tokenPositions[b.TokenIndex(0,0)], Is.Not.EqualTo(relTo14));
         }
 
         [Test]
@@ -272,7 +272,7 @@ namespace Ludo.Tests
             b.DebugSetTokenAtRelative(0, 2, start);
 
             b.MoveToken(b.TokenIndex(0,2), 1);
-            Assert.That(b.TokenPositions[b.TokenIndex(0,2)], Is.EqualTo(relTo22));
+            Assert.That(b.tokenPositions[b.TokenIndex(0,2)], Is.EqualTo(relTo22));
         }
 
         [Test]
@@ -286,7 +286,7 @@ namespace Ludo.Tests
             b.DebugSetTokenAtRelative(0, 0, startRel);
 
             b.MoveToken(b.TokenIndex(0,0), 1);
-            Assert.That(b.TokenPositions[b.TokenIndex(0,0)], Is.EqualTo(relTo25));
+            Assert.That(b.tokenPositions[b.TokenIndex(0,0)], Is.EqualTo(relTo25));
         }
 
         [Test]
@@ -299,7 +299,7 @@ namespace Ludo.Tests
             b.DebugSetTokenAtRelative(0, 0, 50);
             b.MoveToken(b.TokenIndex(0,0), 3);
 
-            Assert.That(b.TokenPositions[b.TokenIndex(0,0)], Is.EqualTo(50));
+            Assert.That(b.tokenPositions[b.TokenIndex(0,0)], Is.EqualTo(50));
         }
     }
 
@@ -318,8 +318,8 @@ namespace Ludo.Tests
 
             b.MoveToken(b.TokenIndex(0,0), 1);
 
-            Assert.That(b.TokenPositions[b.TokenIndex(0,0)], Is.EqualTo(relTo10));
-            Assert.That(b.TokenPositions[b.TokenIndex(1,0)], Is.EqualTo(LudoBoard.Base));
+            Assert.That(b.tokenPositions[b.TokenIndex(0,0)], Is.EqualTo(relTo10));
+            Assert.That(b.tokenPositions[b.TokenIndex(1,0)], Is.EqualTo(LudoBoard.Base));
         }
 
         [Test]
@@ -334,9 +334,9 @@ namespace Ludo.Tests
 
             b.MoveToken(b.TokenIndex(0,0), 1);
 
-            Assert.That(b.TokenPositions[b.TokenIndex(0,0)], Is.EqualTo(relTo14));
+            Assert.That(b.tokenPositions[b.TokenIndex(0,0)], Is.EqualTo(relTo14));
             Assert.That(b.IsOnMainTrack(b.TokenIndex(1,0)), Is.True);
-            Assert.That(b.TokenPositions[b.TokenIndex(1,0)], Is.EqualTo(b.RelativeForAbsolute(1, 14)));
+            Assert.That(b.tokenPositions[b.TokenIndex(1,0)], Is.EqualTo(b.RelativeForAbsolute(1, 14)));
         }
 
         [Test]
@@ -351,7 +351,7 @@ namespace Ludo.Tests
 
             b.MoveToken(b.TokenIndex(0,0), 1);
 
-            Assert.That(b.TokenPositions[b.TokenIndex(0,0)], Is.EqualTo((byte)startRel));
+            Assert.That(b.tokenPositions[b.TokenIndex(0,0)], Is.EqualTo((byte)startRel));
             Assert.That(b.IsOnMainTrack(b.TokenIndex(1,0)), Is.True);
             Assert.That(b.IsOnMainTrack(b.TokenIndex(1,1)), Is.True);
         }
@@ -369,9 +369,9 @@ namespace Ludo.Tests
 
             b.MoveToken(b.TokenIndex(0,0), 1);
 
-            Assert.That(b.TokenPositions[b.TokenIndex(0,0)], Is.EqualTo(relTo21));
-            Assert.That(b.TokenPositions[b.TokenIndex(1,0)], Is.EqualTo(LudoBoard.Base));
-            Assert.That(b.TokenPositions[b.TokenIndex(2,0)], Is.EqualTo(LudoBoard.Base));
+            Assert.That(b.tokenPositions[b.TokenIndex(0,0)], Is.EqualTo(relTo21));
+            Assert.That(b.tokenPositions[b.TokenIndex(1,0)], Is.EqualTo(LudoBoard.Base));
+            Assert.That(b.tokenPositions[b.TokenIndex(2,0)], Is.EqualTo(LudoBoard.Base));
         }
 
         [Test]
@@ -386,8 +386,8 @@ namespace Ludo.Tests
 
             b.MoveToken(b.TokenIndex(0,0), 1);
 
-            Assert.That(b.TokenPositions[b.TokenIndex(0,0)], Is.EqualTo(relTo30));
-            Assert.That(b.TokenPositions[b.TokenIndex(0,1)], Is.EqualTo(relTo30));
+            Assert.That(b.tokenPositions[b.TokenIndex(0,0)], Is.EqualTo(relTo30));
+            Assert.That(b.tokenPositions[b.TokenIndex(0,1)], Is.EqualTo(relTo30));
         }
     }
 
@@ -403,8 +403,8 @@ namespace Ludo.Tests
             b.DebugSetTokenAtRelative(0, 0, 55);
             b.MoveToken(b.TokenIndex(0,0), 2); // 55 -> 57
 
-            Assert.That(b.TokenPositions[b.TokenIndex(0,0)], Is.EqualTo(57));
-            Assert.That(b.TokenPositions[b.TokenIndex(1,0)], Is.EqualTo(b.RelativeForAbsolute(1, 12)));
+            Assert.That(b.tokenPositions[b.TokenIndex(0,0)], Is.EqualTo(57));
+            Assert.That(b.tokenPositions[b.TokenIndex(1,0)], Is.EqualTo(b.RelativeForAbsolute(1, 12)));
         }
 
         [Test]
@@ -474,7 +474,7 @@ namespace Ludo.Tests
         {
             var b = new LudoBoard(4);
             Assert.Throws<ArgumentOutOfRangeException>(() => b.MoveToken(-1, 1));
-            Assert.Throws<ArgumentOutOfRangeException>(() => b.MoveToken(b.TokenPositions.Length, 1));
+            Assert.Throws<ArgumentOutOfRangeException>(() => b.MoveToken(b.tokenPositions.Length, 1));
         }
 
         [Test]
@@ -482,7 +482,7 @@ namespace Ludo.Tests
         {
             var b = new LudoBoard(4);
             Assert.Throws<ArgumentOutOfRangeException>(() => b.GetOutOfBase(-5));
-            Assert.Throws<ArgumentOutOfRangeException>(() => b.GetOutOfBase(b.TokenPositions.Length));
+            Assert.Throws<ArgumentOutOfRangeException>(() => b.GetOutOfBase(b.tokenPositions.Length));
         }
     }
     
