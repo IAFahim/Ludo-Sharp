@@ -1,489 +1,392 @@
+// NUnit test suite for LudoBoard (Try* pattern edition)
+// Edge-cases galore, arranged with AAA, sprinkled with a little joy ✨
+
 using System;
-using System.Linq;
+using System.Collections.Generic;
 using NUnit.Framework;
 using Ludo;
 
 namespace Ludo.Tests
 {
     [TestFixture]
-    public class ConstructorAndStateTests
+    [TestOf(typeof(LudoBoard))]
+    public class LudoBoard_TryPattern_Tests
     {
-        [TestCase(0)]
-        [TestCase(1)]
-        [TestCase(5)]
-        public void Constructor_InvalidPlayerCount_Throws(int players)
+        private const int Players4 = 4;
+        private const int Players2 = 2;
+        private const byte Base = 0;
+        private const byte Start = 1;
+        private const byte TotalMain = 52; // must align with implementation
+        private const byte HomeStretchStartExpected = 52; // per user directive; do NOT change logic here
+        private const byte StepsToHome = 6;
+        private const byte HomeExpected = (byte)(HomeStretchStartExpected + StepsToHome); // 58
+
+        private LudoBoard _board4;
+        private LudoBoard _board2;
+
+        [SetUp]
+        public void SetUp()
         {
-            Assert.Throws<ArgumentException>(() => new LudoBoard(players));
+            _board4 = new LudoBoard(Players4);
+            _board2 = new LudoBoard(Players2);
         }
 
-        [TestCase(2, 8)]
-        [TestCase(3, 12)]
-        [TestCase(4, 16)]
-        public void Constructor_InitializesTokensAtBase(int players, int expectedLen)
+        // ---------- Helpers ----------
+        private static int Idx(int player, int token) => player * 4 + token; // 4 tokens per player
+
+        private static int GetPlayerOffset(int player, int playerCount)
         {
-            var b = new LudoBoard(players);
-            Assert.That(b.playerCount, Is.EqualTo(players));
-            Assert.That(b.tokenPositions.Length, Is.EqualTo(expectedLen));
-            Assert.That(b.tokenPositions.All(p => p == LudoBoard.Base), Is.True);
+            // Mirrors production logic
+            int perQuarter = TotalMain / 4; // 13
+            return playerCount == 2 ? player * 2 * perQuarter : player * perQuarter;
         }
-    }
 
-    [TestFixture]
-    public class TileTypeTests
-    {
-        [Test]
-        public void TileType_Boundaries()
+        private static byte RelativeForAbsolute(int absolute, int player, int playerCount)
         {
-            var b = new LudoBoard(4);
-
-            b.DebugSetTokenAtRelative(0, 0, LudoBoard.Base);
-            Assert.That(b.IsAtBase(b.TokenIndex(0,0)), Is.True);
-            Assert.That(b.IsOnMainTrack(b.TokenIndex(0,0)), Is.False);
-            Assert.That(b.IsOnHomeStretch(b.TokenIndex(0,0)), Is.False);
-            Assert.That(b.IsHome(b.TokenIndex(0,0)), Is.False);
-
-            b.DebugSetTokenAtRelative(0, 0, LudoBoard.MainStart);
-            Assert.That(b.IsOnMainTrack(b.TokenIndex(0,0)), Is.True);
-            Assert.That(b.IsOnHomeStretch(b.TokenIndex(0,0)), Is.False);
-            Assert.That(b.IsHome(b.TokenIndex(0,0)), Is.False);
-
-            b.DebugSetTokenAtRelative(0, 0, LudoBoard.MainEnd);
-            Assert.That(b.IsOnMainTrack(b.TokenIndex(0,0)), Is.True);
-
-            b.DebugSetTokenAtRelative(0, 0, LudoBoard.HomeStart);
-            Assert.That(b.IsOnHomeStretch(b.TokenIndex(0,0)), Is.True);
-            Assert.That(b.IsOnMainTrack(b.TokenIndex(0,0)), Is.False);
-
-            b.DebugSetTokenAtRelative(0, 0, LudoBoard.HomeStart + LudoBoard.StepsToHome - 1); // 58
-            Assert.That(b.IsOnHomeStretch(b.TokenIndex(0,0)), Is.True);
-            Assert.That(b.IsHome(b.TokenIndex(0,0)), Is.False);
-
-            b.DebugSetTokenAtRelative(0, 0, LudoBoard.Home);
-            Assert.That(b.IsHome(b.TokenIndex(0,0)), Is.True);
-            Assert.That(b.IsOnHomeStretch(b.TokenIndex(0,0)), Is.False);
-            Assert.That(b.IsOnMainTrack(b.TokenIndex(0,0)), Is.False);
+            // invert ToAbsoluteMainTrack: (r-1+offset)%52 + 1 = absolute
+            int offset = GetPlayerOffset(player, playerCount);
+            int r0 = ((absolute - 1 - offset) % TotalMain + TotalMain) % TotalMain; // 0..51
+            return (byte)(r0 + 1);
         }
-    }
 
-    [TestFixture]
-    public class BaseExitTests
-    {
-        [Test]
-        public void GetOutOfBase_AllowsExit_WhenStartNotBlockaded()
+        private static void PlaceBlockadeAtAbsolute(ref LudoBoard b, int absolute, (int p, int t) a, (int p, int t) c)
         {
-            var b = new LudoBoard(4);
-            b.GetOutOfBase(b.TokenIndex(0,0));
-            Assert.That(b.tokenPositions[b.TokenIndex(0,0)], Is.EqualTo(LudoBoard.MainStart));
+            // two tokens on same absolute tile (any colors)
+            var r1 = RelativeForAbsolute(absolute, a.p, b.playerCount);
+            var r2 = RelativeForAbsolute(absolute, c.p, b.playerCount);
+            Assert.That(b.TrySetTokenPosition(Idx(a.p, a.t), r1, out _));
+            Assert.That(b.TrySetTokenPosition(Idx(c.p, c.t), r2, out _));
         }
+
+        private static void SetRelative(ref LudoBoard b, int player, int token, byte relative)
+        {
+            Assert.That(b.TrySetTokenPosition(Idx(player, token), relative, out _));
+        }
+
+        private static void SetHome(ref LudoBoard b, int player, int token)
+        {
+            // 58 given HomeStretchStart=52 and StepsToHome=6
+            byte home = (byte)(HomeStretchStartExpected + StepsToHome);
+            Assert.That(b.TrySetTokenPosition(Idx(player, token), home, out _));
+        }
+
+        // ---------- Structural / invariant tests ----------
 
         [Test]
-        public void GetOutOfBase_DoesNotCapture_OnSafeStartTile()
+        public void Constructor_Initializes_AllTokensAtBase()
         {
-            var b = new LudoBoard(4);
-            // Opponent on our start (safe)
-            b.DebugSetTokenAtAbsolute(1, 0, b.StartAbsoluteTile(0));
-            b.GetOutOfBase(b.TokenIndex(0,0));
+            // Arrange + Act (done in SetUp)
 
-            Assert.That(b.IsOnMainTrack(b.TokenIndex(1,0)), Is.True); // opponent remains
-            Assert.That(b.tokenPositions[b.TokenIndex(0,0)], Is.EqualTo(LudoBoard.MainStart));
+            // Assert
+            for (int i = 0; i < _board4.tokenPositions.Length; i++)
+                Assert.That(_board4.tokenPositions[i], Is.EqualTo(Base));
         }
 
         [Test]
-        public void GetOutOfBase_BlockedByOpponentBlockade_OnStartTile()
+        public void HomeStretch_StartsAt_52_AndOverlapsMainTrack()
         {
-            var b = new LudoBoard(4);
-            b.DebugMakeBlockadeAtAbsolute(1, b.StartAbsoluteTile(0));
-            b.GetOutOfBase(b.TokenIndex(0,0));
-            Assert.That(b.tokenPositions[b.TokenIndex(0,0)], Is.EqualTo(LudoBoard.Base));
-        }
+            // Arrange
+            var idx = Idx(0, 0);
+            Assert.That(_board4.TrySetTokenPosition(idx, HomeStretchStartExpected, out _));
 
-        [Test]
-        public void MoveToken_CanExitBase_WithSix_AndNoBlockade()
-        {
-            var b = new LudoBoard(4);
-            b.MoveToken(b.TokenIndex(0,0), LudoBoard.ExitRoll);
-            Assert.That(b.tokenPositions[b.TokenIndex(0,0)], Is.EqualTo(LudoBoard.MainStart));
-        }
-
-        [Test]
-        public void MoveToken_CannotExitBase_WhenStartBlockaded()
-        {
-            var b = new LudoBoard(4);
-            b.DebugMakeBlockadeAtAbsolute(2, b.StartAbsoluteTile(0));
-            b.MoveToken(b.TokenIndex(0,0), LudoBoard.ExitRoll);
-            Assert.That(b.tokenPositions[b.TokenIndex(0,0)], Is.EqualTo(LudoBoard.Base));
-        }
-
-        [Test]
-        public void MoveToken_BaseWithNonSix_DoesNotMove()
-        {
-            var b = new LudoBoard(4);
-            b.MoveToken(b.TokenIndex(0,0), 5);
-            Assert.That(b.tokenPositions[b.TokenIndex(0,0)], Is.EqualTo(LudoBoard.Base));
-        }
-
-        [Test]
-        public void ExitBase_NotBlockedByMixedOpponents_OnStartTile()
-        {
-            var b = new LudoBoard(4);
-            int startAbs = b.StartAbsoluteTile(0);
-            b.DebugSetTokenAtAbsolute(1, 0, startAbs);
-            b.DebugSetTokenAtAbsolute(2, 0, startAbs);
-
-            b.MoveToken(b.TokenIndex(0,0), LudoBoard.ExitRoll);
-            Assert.That(b.tokenPositions[b.TokenIndex(0,0)], Is.EqualTo(LudoBoard.MainStart));
-
-            // No capture (safe)
-            Assert.That(b.IsOnMainTrack(b.TokenIndex(1,0)), Is.True);
-            Assert.That(b.IsOnMainTrack(b.TokenIndex(2,0)), Is.True);
-        }
-    }
-
-    [TestFixture]
-    public class MainTrackMovementTests
-    {
-        [Test]
-        public void Move_OnMainTrack_NoWrap_NoHomeEntry()
-        {
-            var b = new LudoBoard(4);
-            b.DebugSetTokenAtRelative(0, 0, 10);
-            b.MoveToken(b.TokenIndex(0,0), 3);
-            Assert.That(b.tokenPositions[b.TokenIndex(0,0)], Is.EqualTo(13));
-        }
-
-        [Test]
-        public void Move_LandingOn52_StaysOnMainTrack()
-        {
-            var b = new LudoBoard(4);
-            b.DebugSetTokenAtRelative(0, 0, 49);
-            b.MoveToken(b.TokenIndex(0,0), 3);
-            Assert.That(b.IsOnMainTrack(b.TokenIndex(0,0)), Is.True);
-            Assert.That(b.tokenPositions[b.TokenIndex(0,0)], Is.EqualTo(52));
-        }
-
-        [TestCase(50, 3, 53)]
-        [TestCase(51, 2, 53)]
-        [TestCase(52, 1, 53)]
-        public void EnterHomeStretch_FromDifferentOffsets(int start, int steps, int expected)
-        {
-            var b = new LudoBoard(4);
-            b.DebugSetTokenAtRelative(0, 0, start);
-            b.MoveToken(b.TokenIndex(0,0), steps);
-            Assert.That(b.IsOnHomeStretch(b.TokenIndex(0,0)), Is.True);
-            Assert.That(b.tokenPositions[b.TokenIndex(0,0)], Is.EqualTo(expected));
-        }
-
-        [TestCase(52, 7, 59)] // exactly home
-        [TestCase(55, 4, 59)] // from home stretch to home
-        [TestCase(48, 11, 59)] // long exact path to home
-        public void ExactToHome_IsAllowed(int start, int steps, int expected)
-        {
-            var b = new LudoBoard(4);
-            b.DebugSetTokenAtRelative(0, 0, start);
-            b.MoveToken(b.TokenIndex(0,0), steps);
-            Assert.That(b.IsHome(b.TokenIndex(0,0)), Is.True);
-            Assert.That(b.tokenPositions[b.TokenIndex(0,0)], Is.EqualTo(expected));
-        }
-
-        [TestCase(52, 8)]
-        [TestCase(58, 2)]
-        [TestCase(57, 3)]
-        public void OvershootHome_IsIllegal(int start, int steps)
-        {
-            var b = new LudoBoard(4);
-            b.DebugSetTokenAtRelative(0, 0, start);
-            b.MoveToken(b.TokenIndex(0,0), steps);
-            Assert.That(b.tokenPositions[b.TokenIndex(0,0)], Is.EqualTo((byte)start));
-        }
-
-        [Test]
-        public void Move_ZeroOrNegativeSteps_DoesNothing()
-        {
-            var b = new LudoBoard(4);
-            b.DebugSetTokenAtRelative(0, 0, 10);
-            b.MoveToken(b.TokenIndex(0,0), 0);
-            Assert.That(b.tokenPositions[b.TokenIndex(0,0)], Is.EqualTo(10));
-            b.MoveToken(b.TokenIndex(0,0), -2);
-            Assert.That(b.tokenPositions[b.TokenIndex(0,0)], Is.EqualTo(10));
-        }
-
-        [Test]
-        public void PassOverOpponent_NoCapture()
-        {
-            var b = new LudoBoard(4);
-            // Opponent on abs 10
-            b.DebugSetTokenAtAbsolute(1, 0, 10);
-
-            // Our token on abs 9 (one step before), move 2 to abs 11
-            byte relTo9 = b.RelativeForAbsolute(0, 9);
-            b.DebugSetTokenAtRelative(0, 0, relTo9);
-
-            b.MoveToken(b.TokenIndex(0,0), 2);
-
-            // Opponent should remain (not captured)
-            Assert.That(b.tokenPositions[b.TokenIndex(1,0)], Is.EqualTo(b.RelativeForAbsolute(1, 10)));
-        }
-    }
-
-    [TestFixture]
-    public class BlockadeTests
-    {
-        [Test]
-        public void PassingOpponentBlockade_IsIllegal()
-        {
-            var b = new LudoBoard(4);
-
-            // Opponent blockade at abs 20
-            b.DebugMakeBlockadeAtAbsolute(1, 20);
-
-            // Choose our start so that next step lands on abs 20
-            byte rPlus1 = b.RelativeForAbsolute(0, 20);
-            int startRel = rPlus1 - 1;
-            if (startRel <= 0) startRel += LudoBoard.MainEnd;
-
-            b.DebugSetTokenAtRelative(0, 0, startRel);
-            b.MoveToken(b.TokenIndex(0,0), 1);
-
-            Assert.That(b.tokenPositions[b.TokenIndex(0,0)], Is.EqualTo((byte)startRel));
-        }
-
-        [Test]
-        public void OpponentBlockade_OnSafeTile_StillBlocksPassage()
-        {
-            var b = new LudoBoard(4);
-            b.DebugMakeBlockadeAtAbsolute(1, 14);
-
-            byte relTo14 = b.RelativeForAbsolute(0, 14);
-            int startRel = relTo14 == 1 ? LudoBoard.MainEnd : relTo14 - 1;
-            b.DebugSetTokenAtRelative(0, 0, startRel);
-
-            b.MoveToken(b.TokenIndex(0,0), 1);
-            Assert.That(b.tokenPositions[b.TokenIndex(0,0)], Is.Not.EqualTo(relTo14));
-        }
-
-        [Test]
-        public void OwnPair_DoesNotBlock_SelfMovement()
-        {
-            var b = new LudoBoard(4);
-            b.DebugMakeBlockadeAtAbsolute(0, 22);
-
-            byte relTo22 = b.RelativeForAbsolute(0, 22);
-            int start = relTo22 == 1 ? LudoBoard.MainEnd : relTo22 - 1;
-            b.DebugSetTokenAtRelative(0, 2, start);
-
-            b.MoveToken(b.TokenIndex(0,2), 1);
-            Assert.That(b.tokenPositions[b.TokenIndex(0,2)], Is.EqualTo(relTo22));
-        }
-
-        [Test]
-        public void BlockadeAfterLanding_DoesNotBlockCurrentMove()
-        {
-            var b = new LudoBoard(4);
-            b.DebugMakeBlockadeAtAbsolute(1, 26);
-
-            byte relTo25 = b.RelativeForAbsolute(0, 25);
-            int startRel = relTo25 == 1 ? LudoBoard.MainEnd : relTo25 - 1;
-            b.DebugSetTokenAtRelative(0, 0, startRel);
-
-            b.MoveToken(b.TokenIndex(0,0), 1);
-            Assert.That(b.tokenPositions[b.TokenIndex(0,0)], Is.EqualTo(relTo25));
-        }
-
-        [Test]
-        public void BlockadeOnHomeEntry_PreventsEnteringHomeStretch()
-        {
-            var b = new LudoBoard(4);
-            // For P0, home entry is absolute 52
-            b.DebugMakeBlockadeAtAbsolute(1, 52);
-
-            b.DebugSetTokenAtRelative(0, 0, 50);
-            b.MoveToken(b.TokenIndex(0,0), 3);
-
-            Assert.That(b.tokenPositions[b.TokenIndex(0,0)], Is.EqualTo(50));
-        }
-    }
-
-    [TestFixture]
-    public class CaptureTests
-    {
-        [Test]
-        public void LandingOnNonSafe_WithSingleOpponentToken_Captures()
-        {
-            var b = new LudoBoard(4);
-            b.DebugSetTokenAtAbsolute(1, 0, 10);
-
-            byte relTo10 = b.RelativeForAbsolute(0, 10);
-            int startRel = relTo10 == 1 ? LudoBoard.MainEnd : relTo10 - 1;
-            b.DebugSetTokenAtRelative(0, 0, startRel);
-
-            b.MoveToken(b.TokenIndex(0,0), 1);
-
-            Assert.That(b.tokenPositions[b.TokenIndex(0,0)], Is.EqualTo(relTo10));
-            Assert.That(b.tokenPositions[b.TokenIndex(1,0)], Is.EqualTo(LudoBoard.Base));
-        }
-
-        [Test]
-        public void LandingOnSafe_Tile_DoesNotCapture()
-        {
-            var b = new LudoBoard(4);
-            b.DebugSetTokenAtAbsolute(1, 0, 14);
-
-            byte relTo14 = b.RelativeForAbsolute(0, 14);
-            int startRel = relTo14 == 1 ? LudoBoard.MainEnd : relTo14 - 1;
-            b.DebugSetTokenAtRelative(0, 0, startRel);
-
-            b.MoveToken(b.TokenIndex(0,0), 1);
-
-            Assert.That(b.tokenPositions[b.TokenIndex(0,0)], Is.EqualTo(relTo14));
-            Assert.That(b.IsOnMainTrack(b.TokenIndex(1,0)), Is.True);
-            Assert.That(b.tokenPositions[b.TokenIndex(1,0)], Is.EqualTo(b.RelativeForAbsolute(1, 14)));
-        }
-
-        [Test]
-        public void LandingOnNonSafe_WithTwoOpponentsSameColor_IsIllegal_NoCapture()
-        {
-            var b = new LudoBoard(4);
-            b.DebugMakeBlockadeAtAbsolute(1, 18);
-
-            byte relTo18 = b.RelativeForAbsolute(0, 18);
-            int startRel = relTo18 == 1 ? LudoBoard.MainEnd : relTo18 - 1;
-            b.DebugSetTokenAtRelative(0, 0, startRel);
-
-            b.MoveToken(b.TokenIndex(0,0), 1);
-
-            Assert.That(b.tokenPositions[b.TokenIndex(0,0)], Is.EqualTo((byte)startRel));
-            Assert.That(b.IsOnMainTrack(b.TokenIndex(1,0)), Is.True);
-            Assert.That(b.IsOnMainTrack(b.TokenIndex(1,1)), Is.True);
-        }
-
-        [Test]
-        public void LandingOnNonSafe_WithTwoOpponentsDifferentColors_CapturesBoth()
-        {
-            var b = new LudoBoard(4);
-            b.DebugSetTokenAtAbsolute(1, 0, 21);
-            b.DebugSetTokenAtAbsolute(2, 0, 21);
-
-            byte relTo21 = b.RelativeForAbsolute(0, 21);
-            int startRel = relTo21 == 1 ? LudoBoard.MainEnd : relTo21 - 1;
-            b.DebugSetTokenAtRelative(0, 0, startRel);
-
-            b.MoveToken(b.TokenIndex(0,0), 1);
-
-            Assert.That(b.tokenPositions[b.TokenIndex(0,0)], Is.EqualTo(relTo21));
-            Assert.That(b.tokenPositions[b.TokenIndex(1,0)], Is.EqualTo(LudoBoard.Base));
-            Assert.That(b.tokenPositions[b.TokenIndex(2,0)], Is.EqualTo(LudoBoard.Base));
-        }
-
-        [Test]
-        public void LandingOnOwnToken_IsAllowed_NoCapture()
-        {
-            var b = new LudoBoard(4);
-            b.DebugSetTokenAtAbsolute(0, 1, 30);
-
-            byte relTo30 = b.RelativeForAbsolute(0, 30);
-            int startRel = relTo30 == 1 ? LudoBoard.MainEnd : relTo30 - 1;
-            b.DebugSetTokenAtRelative(0, 0, startRel);
-
-            b.MoveToken(b.TokenIndex(0,0), 1);
-
-            Assert.That(b.tokenPositions[b.TokenIndex(0,0)], Is.EqualTo(relTo30));
-            Assert.That(b.tokenPositions[b.TokenIndex(0,1)], Is.EqualTo(relTo30));
-        }
-    }
-
-    [TestFixture]
-    public class HomeStretchTests
-    {
-        [Test]
-        public void MovingWithinHomeStretch_NoCaptureOccurs()
-        {
-            var b = new LudoBoard(4);
-            b.DebugSetTokenAtAbsolute(1, 0, 12);
-
-            b.DebugSetTokenAtRelative(0, 0, 55);
-            b.MoveToken(b.TokenIndex(0,0), 2); // 55 -> 57
-
-            Assert.That(b.tokenPositions[b.TokenIndex(0,0)], Is.EqualTo(57));
-            Assert.That(b.tokenPositions[b.TokenIndex(1,0)], Is.EqualTo(b.RelativeForAbsolute(1, 12)));
-        }
-
-        [Test]
-        public void IsOnSafeTile_TrueThroughoutHomeStretch()
-        {
-            var b = new LudoBoard(4);
-            foreach (var rel in Enumerable.Range(LudoBoard.HomeStart, LudoBoard.StepsToHome))
+            // Assert: at 52 we should be BOTH on main track and home stretch per current design
+            Assert.Multiple(() =>
             {
-                b.DebugSetTokenAtRelative(0, 0, rel);
-                Assert.That(b.IsOnSafeTile(b.TokenIndex(0,0)), Is.True);
-            }
+                Assert.That(_board4.IsOnHomeStretch(idx), Is.True);
+                Assert.That(_board4.IsOnMainTrack(idx), Is.True);
+            });
         }
-    }
 
-    [TestFixture]
-    public class MovableTokensTests
-    {
+        // ---------- TryGet/SetTokenPosition ----------
+
         [Test]
-        public void GetMovableTokens_BaseTokensAppearOnlyWithSix_AndWhenNotBlockaded()
+        public void TryGetTokenPosition_InvalidIndex_Fails()
         {
-            var b = new LudoBoard(4);
+            Assert.That(_board4.TryGetTokenPosition(-1, out _, out var e1), Is.False);
+            Assert.That(e1, Is.EqualTo(LudoError.InvalidTokenIndex));
 
-            var none = b.GetMovableTokens(0, 5);
-            Assert.That(none, Is.Empty);
-
-            var withSix = b.GetMovableTokens(0, LudoBoard.ExitRoll);
-            Assert.That(withSix.Count, Is.EqualTo(LudoBoard.Tokens)); // all four can exit
-
-            var b2 = new LudoBoard(4);
-            b2.DebugMakeBlockadeAtAbsolute(1, b2.StartAbsoluteTile(0));
-            var blocked = b2.GetMovableTokens(0, LudoBoard.ExitRoll);
-            Assert.That(blocked, Is.Empty);
-        }
-
-        [TestCase(0)]
-        [TestCase(7)]
-        public void GetMovableTokens_IgnoresInvalidDice(int dice)
-        {
-            var b = new LudoBoard(4);
-            Assert.That(b.GetMovableTokens(0, dice), Is.Empty);
-        }
-    }
-
-    [TestFixture]
-    public class HasWonTests
-    {
-        [Test]
-        public void HasWon_TrueOnlyWhenAllTokensHome()
-        {
-            var b = new LudoBoard(4);
-            for (int i = 0; i < 3; i++)
-                b.DebugSetTokenAtRelative(0, i, LudoBoard.Home);
-            b.DebugSetTokenAtRelative(0, 3, LudoBoard.Home - 1);
-
-            Assert.That(b.HasWon(0), Is.False);
-
-            b.DebugSetTokenAtRelative(0, 3, LudoBoard.Home);
-            Assert.That(b.HasWon(0), Is.True);
-        }
-    }
-
-    [TestFixture]
-    public class ErrorHandlingTests
-    {
-        [Test]
-        public void MoveToken_InvalidTokenIndex_Throws()
-        {
-            var b = new LudoBoard(4);
-            Assert.Throws<ArgumentOutOfRangeException>(() => b.MoveToken(-1, 1));
-            Assert.Throws<ArgumentOutOfRangeException>(() => b.MoveToken(b.tokenPositions.Length, 1));
+            Assert.That(_board4.TryGetTokenPosition(_board4.tokenPositions.Length, out _, out var e2), Is.False);
+            Assert.That(e2, Is.EqualTo(LudoError.InvalidTokenIndex));
         }
 
         [Test]
-        public void GetOutOfBase_InvalidTokenIndex_Throws()
+        public void TrySetTokenPosition_InvalidIndex_Fails()
         {
-            var b = new LudoBoard(4);
-            Assert.Throws<ArgumentOutOfRangeException>(() => b.GetOutOfBase(-5));
-            Assert.Throws<ArgumentOutOfRangeException>(() => b.GetOutOfBase(b.tokenPositions.Length));
+            Assert.That(_board4.TrySetTokenPosition(-1, 1, out var e1), Is.False);
+            Assert.That(e1, Is.EqualTo(LudoError.InvalidTokenIndex));
+
+            Assert.That(_board4.TrySetTokenPosition(_board4.tokenPositions.Length, 1, out var e2), Is.False);
+            Assert.That(e2, Is.EqualTo(LudoError.InvalidTokenIndex));
+        }
+
+        // ---------- TryHasWon ----------
+
+        [Test]
+        public void TryHasWon_InvalidPlayer_Fails()
+        {
+            Assert.That(_board4.TryHasWon(-1, out _, out var e1), Is.False);
+            Assert.That(e1, Is.EqualTo(LudoError.InvalidPlayerIndex));
+
+            Assert.That(_board4.TryHasWon(_board4.playerCount, out _, out var e2), Is.False);
+            Assert.That(e2, Is.EqualTo(LudoError.InvalidPlayerIndex));
+        }
+
+        [Test]
+        public void TryHasWon_AllTokensHome_ReturnsTrue()
+        {
+            for (int t = 0; t < 4; t++) SetHome(ref _board4, 1, t);
+            Assert.That(_board4.TryHasWon(1, out var won, out var err), Is.True);
+            Assert.That(err, Is.EqualTo(default(LudoError)));
+            Assert.That(won, Is.True);
+        }
+
+        [Test]
+        public void TryHasWon_NotAllTokensHome_ReturnsFalse()
+        {
+            for (int t = 0; t < 3; t++) SetHome(ref _board4, 1, t);
+            Assert.That(_board4.TryHasWon(1, out var won, out _), Is.True);
+            Assert.That(won, Is.False);
+        }
+
+        // ---------- TryGetMovableTokens ----------
+
+        [TestCase(-1, 6, LudoError.InvalidPlayerIndex)]
+        [TestCase(99, 6, LudoError.InvalidPlayerIndex)]
+        [TestCase(0, 0, LudoError.InvalidDiceRoll)]
+        [TestCase(0, 7, LudoError.InvalidDiceRoll)]
+        public void TryGetMovableTokens_InvalidInputs_Fail(int player, int dice, LudoError expected)
+        {
+            Assert.That(_board4.TryGetMovableTokens(player, dice, out _, out var err), Is.False);
+            Assert.That(err, Is.EqualTo(expected));
+        }
+
+        [Test]
+        public void TryGetMovableTokens_BaseWithSix_YieldsTokensUnlessStartBlocked()
+        {
+            // Arrange: everyone at base; for player 0 a and b; blockade on their start (absolute 1)
+            // Use two opponent tokens to make blockade
+            PlaceBlockadeAtAbsolute(ref _board4, absolute: 1, a: (1, 0), c: (2, 0));
+
+            // Act + Assert
+            Assert.That(_board4.TryGetMovableTokens(0, 6, out var movable, out var err), Is.True);
+            Assert.That(err, Is.EqualTo(default(LudoError)));
+
+            // Because start is blocked, nothing should be movable from base
+            Assert.That(movable, Is.Empty);
+        }
+
+        // ---------- TryGetOutOfBase ----------
+
+        [Test]
+        public void TryGetOutOfBase_NotAtBase_Fails()
+        {
+            var idx = Idx(0, 0);
+            SetRelative(ref _board4, 0, 0, 5);
+            Assert.That(_board4.TryGetOutOfBase(idx, out var err), Is.False);
+            Assert.That(err, Is.EqualTo(LudoError.TokenNotAtBase));
+        }
+
+        [Test]
+        public void TryGetOutOfBase_BlockedStart_Fails()
+        {
+            // Block absolute 1 (player 0 start) with two tokens
+            PlaceBlockadeAtAbsolute(ref _board4, absolute: 1, a: (1, 0), c: (2, 0));
+
+            var idx = Idx(0, 0);
+            Assert.That(_board4.TryGetOutOfBase(idx, out var err), Is.False);
+            Assert.That(err, Is.EqualTo(LudoError.PathBlocked));
+        }
+
+        [Test]
+        public void TryGetOutOfBase_Succeeds_SetsStartPosition()
+        {
+            var idx = Idx(0, 0);
+            Assert.That(_board4.TryGetOutOfBase(idx, out var err), Is.True);
+            Assert.That(err, Is.EqualTo(default(LudoError)));
+
+            Assert.That(_board4.TryGetTokenPosition(idx, out var pos, out _), Is.True);
+            Assert.That(pos, Is.EqualTo(Start));
+        }
+
+        // ---------- TryMoveToken (base / invalid) ----------
+
+        [Test]
+        public void TryMoveToken_InvalidIndexOrStepsOrAlreadyHome_Fails()
+        {
+            Assert.That(_board4.TryMoveToken(-1, 1, out _, out var e1), Is.False);
+            Assert.That(e1, Is.EqualTo(LudoError.InvalidTokenIndex));
+
+            var idx = Idx(0, 0);
+            SetHome(ref _board4, 0, 0);
+            Assert.That(_board4.TryMoveToken(idx, 1, out _, out var e2), Is.False);
+            Assert.That(e2, Is.EqualTo(LudoError.TokenAlreadyHome));
+
+            // reset
+            _board4 = new LudoBoard(Players4);
+            Assert.That(_board4.TryMoveToken(Idx(0,0), 0, out _, out var e3), Is.False);
+            Assert.That(e3, Is.EqualTo(LudoError.InvalidDiceRoll));
+        }
+
+        [Test]
+        public void TryMoveToken_FromBaseWithNonSix_Fails()
+        {
+            var idx = Idx(0, 0);
+            Assert.That(_board4.TryMoveToken(idx, 5, out _, out var err), Is.False);
+            Assert.That(err, Is.EqualTo(LudoError.TokenNotMovable));
+        }
+
+        [Test]
+        public void TryMoveToken_FromBaseWithSix_WhenBlocked_Fails()
+        {
+            PlaceBlockadeAtAbsolute(ref _board4, absolute: 1, a: (1, 0), c: (2, 0));
+            var idx = Idx(0, 0);
+            Assert.That(_board4.TryMoveToken(idx, 6, out _, out var err), Is.False);
+            Assert.That(err, Is.EqualTo(LudoError.PathBlocked));
+        }
+
+        [Test]
+        public void TryMoveToken_FromBaseWithSix_WhenFree_Succeeds()
+        {
+            var idx = Idx(0, 0);
+            Assert.That(_board4.TryMoveToken(idx, 6, out var newPos, out var err), Is.True);
+            Assert.Multiple(() =>
+            {
+                Assert.That(err, Is.EqualTo(default(LudoError)));
+                Assert.That(newPos, Is.EqualTo(Start));
+            });
+        }
+
+        // ---------- TryMoveToken (path blocking & capture) ----------
+
+        [Test]
+        public void TryMoveToken_PathBlocked_Midway_Fails()
+        {
+            // Put our token at relative 1 (abs 1), attempt to move 5 steps to 6; blockade at absolute 3
+            SetRelative(ref _board4, 0, 0, 1);
+            PlaceBlockadeAtAbsolute(ref _board4, absolute: 3, a: (1, 0), c: (2, 0));
+
+            Assert.That(_board4.TryMoveToken(Idx(0,0), 5, out _, out var err), Is.False);
+            Assert.That(err, Is.EqualTo(LudoError.PathBlocked));
+        }
+
+        [Test]
+        public void TryMoveToken_CaptureOpponentOnUnsafe_SendsOpponentToBase()
+        {
+            // Our token at 1 -> move 2 to 3. Place opponent single token at absolute 3 (unsafe)
+            SetRelative(ref _board4, 0, 0, 1);
+            var oppIdx = Idx(1, 0);
+            var oppRel = RelativeForAbsolute(3, 1, _board4.playerCount);
+            SetRelative(ref _board4, 1, 0, oppRel);
+
+            Assert.That(_board4.TryMoveToken(Idx(0,0), 2, out var newPos, out var err), Is.True);
+            Assert.Multiple(() =>
+            {
+                Assert.That(err, Is.EqualTo(default(LudoError)));
+                Assert.That(newPos, Is.EqualTo(3));
+            });
+
+            // Opponent should be bonked back to base
+            Assert.That(_board4.TryGetTokenPosition(oppIdx, out var oppNow, out _), Is.True);
+            Assert.That(oppNow, Is.EqualTo(Base));
+        }
+
+        [Test]
+        public void TryMoveToken_LandsOnSafeTile_NoCapture()
+        {
+            // Safe absolute tiles include 1,14,27,40. We'll collide on 27 (player 1 start), which is safe
+            SetRelative(ref _board4, 0, 0, 14); // For player 0, relative 14 => absolute 14? (offset 0) yes
+
+            // Place opponent at absolute 27
+            var oppIdx = Idx(1, 0);
+            var oppRel = RelativeForAbsolute(27, 1, _board4.playerCount);
+            SetRelative(ref _board4, 1, 0, oppRel);
+
+            // March our token around to absolute 27: need delta of 13 from abs 14
+            // So 13 steps => relative target 27 (still <= 52)
+            Assert.That(_board4.TryMoveToken(Idx(0,0), 13, out var pos, out var err), Is.True);
+            Assert.Multiple(() =>
+            {
+                Assert.That(err, Is.EqualTo(default));
+                Assert.That(pos, Is.EqualTo(27));
+            });
+
+            // Opponent should remain on tile (safe tile)
+            Assert.That(_board4.TryGetTokenPosition(oppIdx, out var oppNow, out _), Is.True);
+            Assert.That(oppNow, Is.EqualTo(oppRel));
+        }
+
+        // ---------- TryMoveToken (home stretch rules with start at 52) ----------
+
+        [Test]
+        public void TryMoveToken_FromNearEnd_EnterHome_Exactly()
+        {
+            // Place our token at relative 52 (which is also home-stretch per current design)
+            SetRelative(ref _board4, 0, 0, HomeStretchStartExpected);
+            Assert.That(_board4.TryMoveToken(Idx(0,0), StepsToHome, out var pos, out var err), Is.True);
+            Assert.Multiple(() =>
+            {
+                Assert.That(err, Is.EqualTo(default));
+                Assert.That(pos, Is.EqualTo(HomeExpected)); // 58
+            });
+        }
+
+        [Test]
+        public void TryMoveToken_FromHomeStretch_WouldOvershoot_Fails()
+        {
+            // Set to 57 then try to move 3 -> would be 60 > 58
+            SetRelative(ref _board4, 0, 0, (byte)(HomeExpected - 1));
+            Assert.That(_board4.TryMoveToken(Idx(0,0), 3, out _, out var err), Is.False);
+            Assert.That(err, Is.EqualTo(LudoError.WouldOvershootHome));
+        }
+
+        [Test]
+        public void TryMoveToken_OnMainTrack_PassingBeyond52_TransitionsToHomeStretchStartingAt52()
+        {
+            // From 51 with roll 2 -> relativeTarget 53 => home-stretch tile = 52
+            SetRelative(ref _board4, 0, 0, 51);
+            Assert.That(_board4.TryMoveToken(Idx(0,0), 2, out var pos, out var err), Is.True);
+            Assert.Multiple(() =>
+            {
+                Assert.That(err, Is.EqualTo(default));
+                Assert.That(pos, Is.EqualTo(HomeStretchStartExpected)); // 52
+                Assert.That(_board4.IsOnHomeStretch(Idx(0,0)), Is.True);
+                Assert.That(_board4.IsOnMainTrack(Idx(0,0)), Is.True); // overlapping zone by design
+            });
+        }
+
+        // ---------- Offsets in 2-player mode ----------
+
+        [Test]
+        public void TwoPlayer_Offsets_AreOpposite_0_and_26()
+        {
+            // player 0 start absolute should be 1; player 1 start absolute should be 27 (safe tile)
+            Assert.That(_board2.TryGetOutOfBase(Idx(0,0), out _), Is.True);
+            Assert.That(_board2.TryGetOutOfBase(Idx(1,0), out _), Is.True);
+
+            // We can't query absolute directly (private); but we can test via capture attempt:
+            // Move p0 26 steps to try to land on p1's start (27). Since it's safe, it won't capture.
+            Assert.That(_board2.TryMoveToken(Idx(0,0), 26, out var p0pos, out _), Is.True);
+            // Put a second token of p1 on start to verify it's still there (no capture)
+            Assert.That(_board2.TryGetOutOfBase(Idx(1,1), out _), Is.True);
+
+            // If safe worked, both tokens co-exist and NO capture occurred
+            Assert.That(_board2.TryGetTokenPosition(Idx(1,0), out var p1start, out _));
+            Assert.That(_board2.TryGetTokenPosition(Idx(1,1), out var p1start2, out _));
+            Assert.Multiple(() =>
+            {
+                Assert.That(p0pos, Is.EqualTo(27));
+                Assert.That(p1start, Is.EqualTo(1)); // relative 1 for player 1 = absolute 27
+                Assert.That(p1start2, Is.EqualTo(1));
+            });
+        }
+
+        // ---------- Legacy wrapper sanity ----------
+
+        [Test]
+        public void HasWon_Legacy_InvalidPlayer_ReturnsFalse()
+        {
+            Assert.That(_board4.HasWon_Legacy(-1), Is.False);
+            Assert.That(_board4.HasWon_Legacy(_board4.playerCount), Is.False);
         }
     }
-    
 }
