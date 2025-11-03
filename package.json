@@ -1,10 +1,10 @@
 {
   "name": "com.iafahim.ludo-sharp",
-  "displayName": "Omiya Games - Template Unity Package",
+  "displayName": "Ludo-Sharp",
   "version": "1.0.0-pre.1",
   "unity": "2021.2",
   "unityRelease": "11f1",
-  "description": "This is a template package, used as a basis to build a bigger one.",
+  "description": "This is a ludo package",
   "category": "Tool",
   "type": "tool",
   "license": "MIT",
